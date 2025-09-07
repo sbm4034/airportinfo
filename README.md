@@ -209,13 +209,13 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🔍 Quick Start Checklist
 
-- [ ] Java 17+ installed
+- [ ] Java 21 installed
 - [ ] Maven 3.6+ installed
 - [ ] Repository cloned
 - [ ] Dependencies installed (`mvn clean install`)
 - [ ] Application running (`java -jar target/airportinfo-0.0.1-SNAPSHOT.jar`)
 - [ ] Health endpoint accessible (`curl http://localhost:8080/actuator/health`)
-- [ ] Sample API call successful
+- [ ] Sample API call successful (`curl 'http://localhost:8080/v1/airports?icaoCodes=KAVL%2CBOI%2CKJFK`)
 - [ ] Metrics endpoint accessible (`curl http://localhost:8080/actuator/prometheus`)
 
 **Need help?** Check the troubleshooting section or create an issue in the repository.
