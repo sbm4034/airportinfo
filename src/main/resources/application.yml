@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: airportinfo
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - circuitbreakers
+          - ratelimiters
+          - retries
+          - metrics
+          - prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    circuitbreakers:
+      enabled: true
+    ratelimiters:
+      enabled: true
+    retries:
+      enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    ratelimiters:
+      enabled: true
+  metrics:
+
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        rest.template.requests: true
+      percentiles:
+        http.server.requests: [ 0.95, 0.99 ]
+      sla:
+        http.server.requests: [ 1000ms, 7000ms ]
+      minimum-expected-value:
+        http.server.requests: 1
+      maximum-expected-value:
+        http.server.requests: 10000
+    enable:
+      all: false
+      http.server.requests: true
+    tags:
+      application: airportinfo
+      client: aviationclient
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+resilience4j:
+  circuitbreaker:
+    instances:
+      airportInfoCircuitBreaker:
+        base-config: default
+  ratelimiter:
+    instances:
+      airportInfoRateLimiter:
+        base-config: default
+  retry:
+    instances:
+      airportInfoRetryTemplateName:
+        base-config: default
