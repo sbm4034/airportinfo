@@ -62,15 +62,19 @@ This service demonstrates enterprise-grade patterns for external API integration
 
 ### 1. Clone Repository
 ```bash
-git clone <repository-url>
+git clone git@github.com:sbm4034/airportinfo.git
 cd airport-info-service
 ```
 
 ### 2. Build Application
 ```bash
-# Clean and build the project
+# Clean, build the project as well as run integration and resiliency tests
+#BE SURE To have internet connection as the integration tests call the external API or else run the alternate command
+
 mvn clean install
 
+#alternate command to skip integration tests if external client is down or internet is down
+mvn clean install -DskipITs
 # Format code (optional)
 mvn fmt:format
 ```
@@ -225,6 +229,14 @@ This project leverages GitHub Copilot for enhanced development productivity and 
 - Spring Boot Actuator endpoint configurations
 - Prometheus metrics exposure settings
 
+**Integration Test Generation**:
+- Basic Structure of Integration Test with valid and invalid scenario
+- Resilience Tests for checking circuit breaker and rate limiter scenarios
+- Run tests explicitly using:
+ ```bash
+mvn test -Dtest=AirportInfoIntegrationTest
+mvn test -Dtest=ResilienceIntegrationTest
+- ```
 ### Benefits Realized
 
 - **Faster Test Development**: 60% reduction in unit test writing time
@@ -249,6 +261,23 @@ public void testCircuitBreakerOpen() throws Exception {
     
     assertThrows(HandledException.class, 
         () -> airportService.getAirportQueryResponse(List.of("ABC")));
+}
+
+// Example: GitHub Copilot generated integrated test structure
+@Test
+@Order(2)
+public void sample() throws InterruptedException {
+  // Given
+  String validEndpoint = "http://localhost:" + port + "/v1/airports?icaoCodes=KJFK";
+
+  ResponseEntity<String> validResponse2 = restTemplate.getForEntity(validEndpoint, String.class);
+
+  Thread.sleep(500); // Brief pause
+  
+  assertThat(validResponse1.getStatusCode())
+          .isIn(HttpStatus.OK, HttpStatus.INTERNAL_SERVER_ERROR);
+  assertThat(recoveryResponse.getStatusCode())
+          .isIn(HttpStatus.OK, HttpStatus.INTERNAL_SERVER_ERROR);
 }
 ```
 ## 🔍 Quick Start Checklist

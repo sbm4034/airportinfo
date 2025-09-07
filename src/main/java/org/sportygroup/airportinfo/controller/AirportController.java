@@ -1,10 +1,10 @@
 package org.sportygroup.airportinfo.controller;
 
 import java.util.List;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.sportygroup.airportinfo.constants.AirportInfoConstant;
-import org.sportygroup.airportinfo.exceptions.ClientServerNotFoundError;
-import org.sportygroup.airportinfo.exceptions.HandledExceptions;
+import org.sportygroup.airportinfo.exceptions.*;
 import org.sportygroup.airportinfo.model.airportquery.response.AirportQueryResponse;
 import org.sportygroup.airportinfo.service.AirportService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AirportController {
 
   public static final String ICAO_CODES_QUERY_PARAM = "icaoCodes";
-  private AirportService airportService;
+  private final AirportService airportService;
 
   public AirportController(@Autowired AirportService airportService) {
     this.airportService = airportService;
@@ -29,22 +29,40 @@ public class AirportController {
 
   @GetMapping
   public ResponseEntity<AirportQueryResponse> getAirports(
-      @RequestParam(value = ICAO_CODES_QUERY_PARAM) List<String> icaoCodes) {
+      @RequestParam(value = ICAO_CODES_QUERY_PARAM) @NonNull List<String> icaoCodes) {
     log.info("Received request to fetch airport details for ICAO codes: {}", icaoCodes);
     AirportQueryResponse airportQueryResponse = null;
     try {
       airportQueryResponse = airportService.getAirportQueryResponse(icaoCodes);
     } catch (HandledExceptions e) {
-      if (e.getCause() instanceof ClientServerNotFoundError) {
-        log.info("Got response 404 or empty response for ICAO codes: {}", icaoCodes);
-        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-      }
-      log.info("Got unexpected error for ICAO codes: {}", icaoCodes);
-      return new ResponseEntity<>(
-          AirportQueryResponse.builder().errorMessage(e.getLocalizedMessage()).build(),
-          HttpStatus.INTERNAL_SERVER_ERROR);
+      return getAirportQueryResponseBasedOnResiliencyFailure(icaoCodes, e);
     }
     log.info("Got successful response for ICAO codes: {}", icaoCodes);
     return new ResponseEntity<>(airportQueryResponse, HttpStatus.OK);
+  }
+
+  private static ResponseEntity<AirportQueryResponse>
+      getAirportQueryResponseBasedOnResiliencyFailure(List<String> icaoCodes, HandledExceptions e) {
+
+    Throwable cause = e.getCause();
+    String message = e.getLocalizedMessage();
+
+    if (cause instanceof ClientServerNotFoundError) {
+      log.info("Got 404/empty response for ICAO codes: {}", icaoCodes);
+      return ResponseEntity.notFound().build();
+    }
+
+    HttpStatus status = getHttpStatusForException(e);
+    log.info("Error for ICAO codes: {} - {}", icaoCodes, message);
+
+    return ResponseEntity.status(status)
+        .body(AirportQueryResponse.builder().errorMessage(message).build());
+  }
+
+  private static HttpStatus getHttpStatusForException(Throwable cause) {
+    if (cause instanceof CircuitBreakerException) return HttpStatus.SERVICE_UNAVAILABLE;
+    if (cause instanceof RateLimiterException) return HttpStatus.TOO_MANY_REQUESTS;
+    if (cause instanceof RetryExceededException) return HttpStatus.GATEWAY_TIMEOUT;
+    return HttpStatus.INTERNAL_SERVER_ERROR;
   }
 }

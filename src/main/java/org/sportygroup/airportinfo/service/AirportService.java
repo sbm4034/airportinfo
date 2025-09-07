@@ -16,8 +16,8 @@ import org.sportygroup.airportinfo.client.ClientResponse;
 import org.sportygroup.airportinfo.client.aviation.records.Airport;
 import org.sportygroup.airportinfo.constants.AirportInfoConstant;
 import org.sportygroup.airportinfo.exceptions.CircuitBreakerException;
-import org.sportygroup.airportinfo.exceptions.HandledExceptions;
 import org.sportygroup.airportinfo.exceptions.RateLimiterException;
+import org.sportygroup.airportinfo.exceptions.RetryExceededException;
 import org.sportygroup.airportinfo.model.airportquery.response.AirportQueryResponse;
 import org.sportygroup.airportinfo.utils.AirportRecordToAirportModelMapperImpl;
 import org.sportygroup.airportinfo.utils.HeaderUtils;
@@ -60,7 +60,7 @@ public class AirportService {
   }
 
   public AirportQueryResponse getAirportQueryResponse(List<String> icaoCodes)
-      throws HandledExceptions {
+      throws CircuitBreakerException, RateLimiterException, RetryExceededException {
     if (rateLimiter.acquirePermission()) {
       log.info("Fetching airport details for ICAO codes: {} -- STARTS", icaoCodes);
       // Creates the client request model for different clients with potentially same request model
@@ -87,27 +87,13 @@ public class AirportService {
                 });
       } catch (RetryException e) {
         if (e.getCause() instanceof CircuitBreakerException) {
-          throw new HandledExceptions(
+          throw new CircuitBreakerException(
               "Circuit breaker activated with state : " + circuitBreaker.getState());
         }
-        throw new HandledExceptions("Exceeded max retries to fetch data from client", e);
+        throw new RetryExceededException("Exceeded max retries to fetch data from client", e);
       }
 
-      // Maps the client response to service response model for different clients with potentially
-      // different response models
-      Map<String, List<Airport>> airportMapFromClient = clientResponse.getAirports();
-      Map<String, List<org.sportygroup.airportinfo.model.airportquery.response.airport.Airport>>
-          airportResponseMap = new HashMap<>(airportMapFromClient.size());
-      airportMapFromClient.forEach(
-          (airportCode, airportList) ->
-              airportResponseMap.put(
-                  airportCode, AirportRecordToAirportModelMapperImpl.map(airportList)));
-      if (!airportResponseMap.isEmpty()) {
-        log.info("Fetching airport details for ICAO codes: {} -- ENDS", icaoCodes);
-        return AirportQueryResponse.builder().airports(airportResponseMap).build();
-      }
-      log.info("Fetching airport details for ICAO codes: {} -- ENDS", icaoCodes);
-      return AirportQueryResponse.builder().airports(Collections.EMPTY_MAP).build();
+      return getAirportQueryResponse(icaoCodes, clientResponse);
     } else {
       throw new RateLimiterException(
           "Rate limit exceeded before attempting service call with limit "
@@ -115,6 +101,25 @@ public class AirportService {
               + " per duration of"
               + rateLimiter.getRateLimiterConfig().getLimitRefreshPeriod());
     }
+  }
+
+  private static AirportQueryResponse getAirportQueryResponse(
+      List<String> icaoCodes, ClientResponse clientResponse) {
+    // Maps the client response to service response model for different clients with potentially
+    // different response models
+    Map<String, List<Airport>> airportMapFromClient = clientResponse.getAirports();
+    Map<String, List<org.sportygroup.airportinfo.model.airportquery.response.airport.Airport>>
+        airportResponseMap = new HashMap<>(airportMapFromClient.size());
+    airportMapFromClient.forEach(
+        (airportCode, airportList) ->
+            airportResponseMap.put(
+                airportCode, AirportRecordToAirportModelMapperImpl.map(airportList)));
+    if (!airportResponseMap.isEmpty()) {
+      log.info("Fetching airport details for ICAO codes: {} -- ENDS", icaoCodes);
+      return AirportQueryResponse.builder().airports(airportResponseMap).build();
+    }
+    log.info("Fetching airport details for ICAO codes: {} -- ENDS", icaoCodes);
+    return AirportQueryResponse.builder().airports(Collections.EMPTY_MAP).build();
   }
 
   private ClientResponse fallbackClientResponse(String state) throws CircuitBreakerException {
